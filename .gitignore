@@ -1,0 +1,24 @@
+# Environments
+video_merger_env/
+env/
+venv/
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# PyInstaller / Build
+build/
+dist/
+*.spec
+
+# Output/Data
+Merge/
+crash_report.log
+*.mp4
+
+# OS
+.DS_Store
+Thumbs.db
