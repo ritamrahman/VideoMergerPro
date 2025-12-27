@@ -1,6 +1,6 @@
-# 👨‍💻 Video Merger Pro - Developer Guide
+# 👨‍💻 Ultimate Video Merger - Developer Guide
 
-This documentation is intended for developers who wish to modify, debug, or extend the Video Merger Pro codebase.
+This documentation is intended for developers who wish to modify, debug, or extend the Ultimate Video Merger codebase.
 
 ## 🏗️ Project Architecture
 
@@ -13,79 +13,55 @@ The application follows a standard **PyQt5 GUI** architecture with a decoupled "
     *   **Key Responsibilities**:
         *   Manages the file list and "Smart Split" configuration.
         *   Updates the sidebar preview (`update_split_preview`).
-        *   Note: The **Potato Mode** detection happens here in `__init__`.
+        *   **Potato Mode** detection happens here in `__init__`.
 
 2.  **`dev/video_merger_robust.py`** (The Engine)
     *   **Role**: Core video processing logic.
     *   **Class `RobustVideoMerger`**: Wraps FFmpeg and MoviePy.
     *   **Key Methods**:
-        *   `calculate_batches()`: Determines how to split videos based on duration/count. **Crucial**: Uses `cached_durations` to avoid main-thread lag.
-        *   `merge_videos()`: Orchestrates the actual merge process.
+        *   `calculate_batches()`: Determines how to split videos based on duration/count.
+        *   `merge_videos()`: Orchestrates the actual merge process. Now includes "Fast Copy" optimization for single-video batches.
 
 3.  **`dev/worker_thread.py`**
     *   **Role**: Background processing to keep the UI responsive.
     *   **Classes**:
-        *   `VideoInfoWorker`: Fetches metadata (duration/resolution) in the background.
-        *   `VideoMergerWorker`: Runs the heavy `merge_videos` function in a separate thread.
-
----
-
-### 📂 Naming Convention
-To ensure a consistent user experience, the filename logic is mirrored in `main.py` (for UI preview) and `worker_thread.py` (for actual output).
-*   **Pattern**: `[Title] clip-[Start]-[End] merge [PartNumber].mp4`
-*   **Standardization**: Both components use a `safe_title` sanitizer that removes non-alphanumeric characters (except spaces, dashes, and underscores).
+        *   `VideoInfoWorker`: Fetches metadata (duration/resolution) using `ffprobe`.
+        *   `VideoMergerWorker`: Runs the heavy `merge_videos` function.
 
 ---
 
 ## ⚡ Performance Concepts
 
-### 1. "Potato Mode" (Dynamic Performance Tiers)
-The code automatically detects system RAM and sets a performance level (0, 1, or 2).
-*   **Implementation**: In `main.py`, we check `GlobalMemoryStatusEx`.
+### 1. Dynamic Performance Tiers (Potato Mode)
+The code automatically detects system RAM and sets a performance level:
 *   **Level 1 (Potato) (< 5GB RAM)**: Reduces `block_size` to 4 and uses `ultrafast` FFmpeg presets.
 *   **Level 2 (Ultimate Stability) (< 2.5GB RAM)**: 
     - Forced **Single-Threading** (`-threads 1`) to prevent memory spikes.
     - Micro-batches (`block_size = 2`).
-    - **MoviePy Fallback Disabled**: The internal engine is completely bypassed to save RAM.
-    - **I/O Buffering**: Uses `max_muxing_queue_size` for slow HDDs.
+    - **MoviePy Fallback Disabled** to save RAM.
+    - **I/O Buffering**: Uses `max_muxing_queue_size` for slow disks.
 
-### 2. Absolute Path Resolution
-To avoid `WinError 2` (File Not Found) in bundled environments, the engine uses `imageio_ffmpeg.get_ffmpeg_exe()` to resolve the absolute path of the bundled FFmpeg binary.
+### 2. Resolution & Aspect Ratio Logic
+*   **Auto Detect**: If every video in a merge batch is vertical (height > width), the output is standardized to **1080x1920**.
+*   **Manual Mode (New)**: The engine supports `resolution_mode` (Auto, Horizontal, Vertical, Square). It uses the `pad` filter in FFmpeg to ensure non-conforming clips are letterboxed/pillarboxed.
 
-### 3. Metadata Fallback (ffprobe-less)
-If `ffprobe.exe` is missing from the environment, the engine switches to `_get_video_info_via_ffmpeg`. This calls `ffmpeg -i` and parses the `stderr` output using Regex to extract duration and resolution.
-
-### 4. Main Thread Blocking Prevention
-*   **Rule**: NEVER call `ffprobe` or `subprocess` on the Main UI Thread.
-*   **Solution**: `calculate_batches` strictly uses a dictionary of cached durations. If a file isn't cached, it is skipped/estimated until the `VideoInfoWorker` fetches it.
+### 3. Smart Auto-Standalone
+Implemented in `calculate_batches`, videos exceeding the `standalone_threshold_sec` (default 60s) are isolated into their own batches to utilize the `shutil.copy2` (Fast Copy) path, bypassing heavy re-encoding.
 
 ---
 
 ## 🛠️ Development Setup
 
 ### Dependencies
-Install the required packages using the `requirements.txt` file:
 ```bash
 pip install -r dev/requirements.txt
 ```
 
-### Running from Source
-```bash
-python dev/main.py
-```
-
 ### Building the EXE
-We use **PyInstaller**. The spec file is located in the `dev/` folder.
 ```bash
-# Run from the project root:
 pyinstaller dev/VideoMergerPro.spec --noconfirm
 ```
-*   **Note**: Proper taskbar icon behavior relies on the `AppUserModelID` set in `main.py`.
-
----
-
-## 🚀 Extending the Project (Ideas)
-
+The output will be `VideoMergerPro v2.5.0.exe`.
 If you want to add features, here are the best places to start:
 
 *   **Add "Fade Transitions"**:
